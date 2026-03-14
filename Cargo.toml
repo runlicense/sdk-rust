@@ -1,0 +1,34 @@
+[package]
+name = "runlicense-sdk-rust"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "RunLicense SDK for Rust - license verification for Rust crates"
+license = "MIT"
+repository = "https://github.com/runlicense/sdk-rust"
+keywords = ["license", "verification", "ed25519", "sdk"]
+categories = ["authentication"]
+
+[lib]
+name = "runlicense_sdk"
+path = "src/lib.rs"
+
+[dependencies]
+ed25519-dalek = "2"
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Phone-home dependencies (included by default for security)
+ureq = { version = "2", optional = true }
+getrandom = { version = "0.2", optional = true }
+
+[features]
+default = ["phone-home"]
+phone-home = ["ureq", "getrandom"]
+
+[dev-dependencies]
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
+tempfile = "3"
+serial_test = "3"
