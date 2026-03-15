@@ -1,8 +1,12 @@
 use crate::types::{LicenseError, LicensePayload, ValidationToken};
 use base64::Engine;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
 use std::path::Path;
 use std::time::Duration;
+
+type HmacSha256 = Hmac<Sha256>;
 
 /// Request timeout for phone-home validation.
 const PHONE_HOME_TIMEOUT: Duration = Duration::from_secs(30);
@@ -20,8 +24,12 @@ pub(crate) fn phone_home(
         .ok_or(LicenseError::NoActivationUrl)?;
 
     let nonce = generate_nonce();
+    let nonce_signature = sign_nonce(&nonce, public_key_b64)?;
 
-    let body = serde_json::json!({ "nonce": nonce });
+    let body = serde_json::json!({
+        "nonce": nonce,
+        "nonce_signature": nonce_signature,
+    });
 
     let agent = ureq::AgentBuilder::new()
         .timeout(PHONE_HOME_TIMEOUT)
@@ -121,6 +129,30 @@ pub(crate) fn verify_token(
     }
 
     Ok(token)
+}
+
+/// Sign a nonce with HMAC-SHA256 using the public key as the secret.
+///
+/// This proves to the server that the SDK holds the legitimate public key
+/// without exposing it directly. The server can verify by recomputing
+/// the HMAC with its copy of the public key.
+fn sign_nonce(nonce: &str, public_key_b64: &str) -> Result<String, LicenseError> {
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let key_bytes = b64
+        .decode(public_key_b64.trim())
+        .map_err(|_| LicenseError::InvalidPublicKey)?;
+
+    let mut mac =
+        HmacSha256::new_from_slice(&key_bytes).map_err(|_| LicenseError::InvalidPublicKey)?;
+    mac.update(nonce.as_bytes());
+
+    let result = mac.finalize();
+    Ok(hex_encode(&result.into_bytes()))
+}
+
+/// Hex-encode a byte slice.
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
 /// Generate a hex-encoded random nonce.
