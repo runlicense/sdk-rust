@@ -650,7 +650,61 @@ mod tests {
     #[cfg(feature = "phone-home")]
     mod phone_home_tests {
         use super::*;
-        use crate::__internal::phone_home::{cache_token, load_cached_token, verify_token};
+        use crate::__internal::phone_home::{
+            cache_token, extract_token, load_cached_token, verify_token,
+        };
+
+        // ── Response envelope parsing tests ──────────────────────────────
+
+        #[test]
+        fn extract_token_from_valid_envelope() {
+            let response = serde_json::json!({
+                "meta": {
+                    "responseCode": 200,
+                    "limit": 20,
+                    "offset": 0,
+                    "message": "OK"
+                },
+                "data": {
+                    "token": "test_token_value",
+                    "expires_at": "2026-03-26T03:11:03+00:00",
+                    "activations_remaining": 1234
+                }
+            });
+            let token = extract_token(&response).unwrap();
+            assert_eq!(token, "test_token_value");
+        }
+
+        #[test]
+        fn extract_token_missing_data_field() {
+            let response = serde_json::json!({
+                "meta": { "responseCode": 200 }
+            });
+            let result = extract_token(&response);
+            assert!(matches!(result, Err(LicenseError::InvalidValidationToken)));
+        }
+
+        #[test]
+        fn extract_token_missing_token_field() {
+            let response = serde_json::json!({
+                "data": {
+                    "expires_at": "2026-03-26T03:11:03+00:00"
+                }
+            });
+            let result = extract_token(&response);
+            assert!(matches!(result, Err(LicenseError::InvalidValidationToken)));
+        }
+
+        #[test]
+        fn extract_token_rejects_old_flat_format() {
+            let response = serde_json::json!({
+                "token": "flat_token_value"
+            });
+            let result = extract_token(&response);
+            assert!(matches!(result, Err(LicenseError::InvalidValidationToken)));
+        }
+
+        // ── Token verification tests ─────────────────────────────────────
 
         #[test]
         fn valid_token_accepted() {

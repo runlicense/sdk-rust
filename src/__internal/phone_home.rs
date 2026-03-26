@@ -57,14 +57,23 @@ pub(crate) fn phone_home(
     let response_body: serde_json::Value = serde_json::from_str(&response_str)
         .map_err(|e| LicenseError::PhoneHomeFailed(e.to_string()))?;
 
-    let token_str = response_body["token"]
-        .as_str()
-        .ok_or(LicenseError::InvalidValidationToken)?;
+    let token_str = extract_token(&response_body)?;
 
     // Parse and verify the token (format: base64(payload).base64(signature))
     let token = verify_token(token_str, public_key_b64, &nonce, &payload.license_id)?;
 
     Ok((token, token_str.to_string()))
+}
+
+/// Extract the token string from the server response envelope.
+pub(crate) fn extract_token(response_body: &serde_json::Value) -> Result<&str, LicenseError> {
+    let data = response_body
+        .get("data")
+        .ok_or(LicenseError::InvalidValidationToken)?;
+
+    data["token"]
+        .as_str()
+        .ok_or(LicenseError::InvalidValidationToken)
 }
 
 /// Verify a signed validation token from the server.
